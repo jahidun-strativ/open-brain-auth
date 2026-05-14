@@ -142,6 +142,24 @@ await supabase.auth.admin.oauth.createClient({
 })
 ```
 
+## Deploy on Vercel
+
+Vite builds a SPA: only `index.html` exists at the root. Direct hits to
+`/oauth/consent`, `/login`, or `/auth/callback` must still return that HTML so
+React Router can run. [vercel.json](vercel.json) adds a rewrite so every path
+falls back to `index.html` (Vercel still serves real files under `/assets/` and
+`/public` first).
+
+1. In the Vercel project, set **Environment variables**:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_PUBLISHABLE_KEY`
+2. If this repo is a monorepo, set **Root Directory** to `open-brain-auth` and
+   **Build command** `pnpm build` (or `npm run build`), **Output** `dist`.
+3. In Supabase **Authentication → URL Configuration**, set **Site URL** to your
+   production origin (e.g. `https://your-app.vercel.app`) and add **Redirect
+   URLs** for `https://your-app.vercel.app/auth/callback`.
+4. Redeploy after changing `vercel.json` or env vars.
+
 ## Scripts
 
 | Command        | What it does                                |
