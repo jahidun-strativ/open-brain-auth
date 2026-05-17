@@ -8,7 +8,7 @@ and approve access.
 ## What this app does
 
 - Renders the consent screen at `/oauth/consent?authorization_id=…`
-- **Invite-only** sign-in: work email must exist in `auth.users` (RPC check), then **Google OAuth**
+- **Invite-only** sign-in: **Continue with Google** first; after Google returns, checks `auth.users` (RPC)
 - Handles the Google return at `/auth/callback` (PKCE)
 - Blocks consent if the user has no row in `mcp_user_projects` (MCP allowlist)
 - Calls `supabase.auth.oauth.approveAuthorization` / `denyAuthorization` to finish the flow
@@ -18,7 +18,7 @@ and approve access.
 | Path             | Purpose                                                                 |
 | ---------------- | ----------------------------------------------------------------------- |
 | `/`              | Landing page                                                            |
-| `/login`         | Email check + Google sign-in (`?redirect=<path>`)                       |
+| `/login`         | Google sign-in (`?redirect=<path>`, optional `?error=` from failed check) |
 | `/auth/callback` | Google OAuth return — PKCE exchange, then forward to `redirect`         |
 | `/oauth/consent` | OAuth consent — expects `?authorization_id=<id>` from Supabase Auth     |
 
@@ -84,7 +84,7 @@ VALUES ('<user-uuid>', 'your-project-slug');
 -- Or super-user: ('<user-uuid>', '*');
 ```
 
-Users without `auth.users` see **User does not exist** on login. Users without `mcp_user_projects` see **Access denied** on consent.
+Users without `auth.users` see **User does not exist** after Google (redirected back to login). Users without `mcp_user_projects` see **Access denied** on consent.
 
 ### 5. Run locally
 

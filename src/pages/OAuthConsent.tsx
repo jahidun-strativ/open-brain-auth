@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { checkMcpAccess } from '../lib/auth-policy'
+import { checkMcpAccess, checkUserInvited } from '../lib/auth-policy'
 import { supabase } from '../lib/supabase'
 
 interface OAuthClient {
@@ -71,6 +71,25 @@ export function OAuthConsent() {
       }
       const email = userData.user.email ?? null
       setUserEmail(email)
+
+      if (email) {
+        const { invited, error: inviteError } = await checkUserInvited(email)
+        if (cancelled) return
+        if (inviteError) {
+          setError(inviteError)
+          setLoading(false)
+          return
+        }
+        if (!invited) {
+          await supabase.auth.signOut()
+          const next = `/oauth/consent?authorization_id=${encodeURIComponent(authorizationId)}`
+          navigate(
+            `/login?redirect=${encodeURIComponent(next)}&error=${encodeURIComponent('User does not exist. Ask your administrator to invite you.')}`,
+            { replace: true },
+          )
+          return
+        }
+      }
 
       const { allowed, error: accessError } = await checkMcpAccess()
       if (cancelled) return
