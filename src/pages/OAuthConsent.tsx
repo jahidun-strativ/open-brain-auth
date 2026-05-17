@@ -23,10 +23,23 @@ type AuthOAuth = {
   ) => Promise<{ data: AuthorizationDetails | null; error: { message: string } | null }>
   approveAuthorization: (
     id: string,
-  ) => Promise<{ data: { redirect_to: string } | null; error: { message: string } | null }>
+  ) => Promise<{
+    data: { redirect_to?: string; redirect_url?: string } | null
+    error: { message: string } | null
+  }>
   denyAuthorization: (
     id: string,
-  ) => Promise<{ data: { redirect_to: string } | null; error: { message: string } | null }>
+  ) => Promise<{
+    data: { redirect_to?: string; redirect_url?: string } | null
+    error: { message: string } | null
+  }>
+}
+
+function consentRedirectTarget(
+  data: { redirect_to?: string; redirect_url?: string } | null | undefined,
+): string | null {
+  const target = data?.redirect_url ?? data?.redirect_to
+  return typeof target === 'string' && target.length > 0 ? target : null
 }
 
 function getOAuth(): AuthOAuth {
@@ -49,6 +62,7 @@ export function OAuthConsent() {
   const [accessDenied, setAccessDenied] = useState(false)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState<'approve' | 'deny' | null>(null)
+  const [redirecting, setRedirecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -141,16 +155,21 @@ export function OAuthConsent() {
 
       if (decisionError) {
         setError(decisionError.message)
+        setSubmitting(null)
         return
       }
-      if (data?.redirect_to) {
-        window.location.href = data.redirect_to
-      } else {
-        setError('Supabase did not return a redirect URL.')
+
+      const target = consentRedirectTarget(data)
+      if (target) {
+        setRedirecting(true)
+        window.location.replace(target)
+        return
       }
+
+      setError('Supabase did not return a redirect URL.')
+      setSubmitting(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
-    } finally {
       setSubmitting(null)
     }
   }
@@ -169,6 +188,15 @@ export function OAuthConsent() {
     return (
       <main className="card">
         <h1>Loading…</h1>
+      </main>
+    )
+  }
+
+  if (redirecting) {
+    return (
+      <main className="card">
+        <h1>Redirecting…</h1>
+        <p>Returning you to the app.</p>
       </main>
     )
   }
