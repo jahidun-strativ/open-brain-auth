@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { checkMcpAccess } from '../lib/auth-policy'
 import { supabase } from '../lib/supabase'
 
 interface OAuthClient {
@@ -45,6 +46,7 @@ export function OAuthConsent() {
 
   const [authDetails, setAuthDetails] = useState<AuthorizationDetails | null>(null)
   const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [accessDenied, setAccessDenied] = useState(false)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState<'approve' | 'deny' | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -67,7 +69,21 @@ export function OAuthConsent() {
         navigate(`/login?redirect=${encodeURIComponent(next)}`, { replace: true })
         return
       }
-      setUserEmail(userData.user.email ?? null)
+      const email = userData.user.email ?? null
+      setUserEmail(email)
+
+      const { allowed, error: accessError } = await checkMcpAccess()
+      if (cancelled) return
+      if (accessError) {
+        setError(accessError)
+        setLoading(false)
+        return
+      }
+      if (!allowed) {
+        setAccessDenied(true)
+        setLoading(false)
+        return
+      }
 
       try {
         const { data, error: detailsError } =
@@ -134,6 +150,36 @@ export function OAuthConsent() {
     return (
       <main className="card">
         <h1>Loading…</h1>
+      </main>
+    )
+  }
+
+  if (accessDenied) {
+    return (
+      <main className="card">
+        <h1>Access denied</h1>
+        <p className="error">
+          Your account (<strong>{userEmail ?? 'unknown'}</strong>) has not been granted access to
+          Open Brain.
+        </p>
+        <p>
+          Contact your Open Brain administrator and ask them to grant your user access to one or
+          more projects.
+        </p>
+        <p className="footer">Once granted, return to your client and connect again.</p>
+        <div className="actions" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => handleDecision('deny')}
+            disabled={submitting !== null || !authorizationId}
+          >
+            {submitting === 'deny' ? 'Denying…' : 'Deny connection'}
+          </button>
+          <button type="button" className="link" onClick={handleSignOut}>
+            Sign out
+          </button>
+        </div>
       </main>
     )
   }

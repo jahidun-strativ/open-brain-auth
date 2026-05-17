@@ -1,17 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { checkUserInvited } from '../lib/auth-policy'
 import { supabase } from '../lib/supabase'
 
-/**
- * Magic-link return target. With `flowType: 'implicit'` and
- * `detectSessionInUrl: true`, supabase-js parses the access/refresh tokens
- * from the URL hash automatically as soon as the client boots. We wait for
- * that to settle (either via `onAuthStateChange` or a direct `getSession`
- * check) and then forward to the originally-requested page.
- */
 function readUrlError(params: URLSearchParams): string | null {
-  // Supabase reports auth errors in the URL hash as well as the query string,
-  // depending on the path that produced the redirect.
   if (typeof window !== 'undefined' && window.location.hash) {
     const hashParams = new URLSearchParams(window.location.hash.slice(1))
     const fromHash = hashParams.get('error_description') ?? hashParams.get('error')
@@ -30,36 +22,52 @@ export function AuthCallback() {
     let cancelled = false
     const redirect = searchParams.get('redirect') ?? '/'
 
-    function go() {
+    async function settle() {
+      const code = searchParams.get('code')
+      if (code) {
+        const { error: exchangeError } =
+          await supabase.auth.exchangeCodeForSession(window.location.href)
+        if (exchangeError) {
+          if (!cancelled) setError(exchangeError.message)
+          return
+        }
+      }
+
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
       if (cancelled) return
+      if (sessionError) {
+        setError(sessionError.message)
+        return
+      }
+
+      const session = sessionData.session
+      if (!session?.user) {
+        setError('Sign-in did not complete. Please try again from the login page.')
+        return
+      }
+
+      const email = session.user.email
+      if (email) {
+        const { invited, error: inviteError } = await checkUserInvited(email)
+        if (cancelled) return
+        if (inviteError) {
+          setError(inviteError)
+          return
+        }
+        if (!invited) {
+          await supabase.auth.signOut()
+          setError('User does not exist. Contact your administrator.')
+          return
+        }
+      }
+
       navigate(redirect, { replace: true })
     }
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (cancelled) return
-      if (data.session) go()
-    })
-
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) go()
-    })
-
-    const timeout = window.setTimeout(() => {
-      if (cancelled) return
-      supabase.auth.getSession().then(({ data }) => {
-        if (cancelled) return
-        if (data.session) {
-          go()
-        } else {
-          setError('Sign-in did not complete. Please request a new magic link.')
-        }
-      })
-    }, 4000)
+    settle()
 
     return () => {
       cancelled = true
-      sub.subscription.unsubscribe()
-      window.clearTimeout(timeout)
     }
   }, [error, navigate, searchParams])
 

@@ -14,11 +14,7 @@ export const supabase = createClient(url, key, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    // Implicit flow returns session material in the URL hash, so the magic-link
-    // callback works even if the email opens in a different browser/profile
-    // than the one that requested the OTP. PKCE would require a code_verifier
-    // stored in the same browser's localStorage, which mail clients regularly
-    // break.
-    flowType: 'implicit',
+    // Google OAuth runs in the same browser tab; PKCE is appropriate here.
+    flowType: 'pkce',
   },
 })
