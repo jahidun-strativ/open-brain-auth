@@ -42,6 +42,18 @@ function consentRedirectTarget(
   return typeof target === 'string' && target.length > 0 ? target : null
 }
 
+/** OAuth 2.1 error redirect when Supabase does not return a deny redirect URL. */
+function buildOAuthDenyRedirect(redirectUri: string, state?: string): string {
+  const url = new URL(redirectUri)
+  url.searchParams.set('error', 'access_denied')
+  url.searchParams.set(
+    'error_description',
+    'The user denied the authorization request or is not permitted to access Open Brain.',
+  )
+  if (state) url.searchParams.set('state', state)
+  return url.toString()
+}
+
 function getOAuth(): AuthOAuth {
   const auth = supabase.auth as unknown as { oauth?: AuthOAuth }
   if (!auth.oauth) {
@@ -105,6 +117,29 @@ export function OAuthConsent() {
         }
       }
 
+      try {
+        const { data, error: detailsError } =
+          await getOAuth().getAuthorizationDetails(authorizationId)
+        if (cancelled) return
+        if (detailsError) {
+          setError(detailsError.message)
+          setLoading(false)
+          return
+        }
+        if (!data) {
+          setError('No authorization request found for this id.')
+          setLoading(false)
+          return
+        }
+        setAuthDetails(data)
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : String(e))
+          setLoading(false)
+        }
+        return
+      }
+
       const { allowed, error: accessError } = await checkMcpAccess()
       if (cancelled) return
       if (accessError) {
@@ -118,22 +153,7 @@ export function OAuthConsent() {
         return
       }
 
-      try {
-        const { data, error: detailsError } =
-          await getOAuth().getAuthorizationDetails(authorizationId)
-        if (cancelled) return
-        if (detailsError) {
-          setError(detailsError.message)
-        } else if (!data) {
-          setError('No authorization request found for this id.')
-        } else {
-          setAuthDetails(data)
-        }
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e))
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
+      if (!cancelled) setLoading(false)
     }
 
     load()
@@ -142,8 +162,15 @@ export function OAuthConsent() {
     }
   }, [authorizationId, navigate])
 
+  function redirectAfterDecision(target: string) {
+    setRedirecting(true)
+    window.location.replace(target)
+  }
+
   async function handleDecision(decision: 'approve' | 'deny') {
     if (!authorizationId) return
+    if (decision === 'approve' && accessDenied) return
+
     setError(null)
     setSubmitting(decision)
     try {
@@ -153,22 +180,33 @@ export function OAuthConsent() {
           ? await oauth.approveAuthorization(authorizationId)
           : await oauth.denyAuthorization(authorizationId)
 
-      if (decisionError) {
-        setError(decisionError.message)
-        setSubmitting(null)
+      if (!decisionError) {
+        const target = consentRedirectTarget(data)
+        if (target) {
+          redirectAfterDecision(target)
+          return
+        }
+      }
+
+      if (decision === 'deny' && authDetails?.redirect_uri) {
+        redirectAfterDecision(
+          buildOAuthDenyRedirect(authDetails.redirect_uri, authDetails.state),
+        )
         return
       }
 
-      const target = consentRedirectTarget(data)
-      if (target) {
-        setRedirecting(true)
-        window.location.replace(target)
-        return
-      }
-
-      setError('Supabase did not return a redirect URL.')
+      setError(
+        decisionError?.message ??
+          'Could not complete the request. Try again or close this tab and return to your app.',
+      )
       setSubmitting(null)
     } catch (e) {
+      if (decision === 'deny' && authDetails?.redirect_uri) {
+        redirectAfterDecision(
+          buildOAuthDenyRedirect(authDetails.redirect_uri, authDetails.state),
+        )
+        return
+      }
       setError(e instanceof Error ? e.message : String(e))
       setSubmitting(null)
     }
@@ -214,6 +252,7 @@ export function OAuthConsent() {
           more projects.
         </p>
         <p className="footer">Once granted, return to your client and connect again.</p>
+        {error && <p className="error">{error}</p>}
         <div className="actions" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
           <button
             type="button"
