@@ -25,7 +25,7 @@ export function Login() {
     setStatus('checking')
 
     const gate = await checkCanSignInWithEmail(email)
-    if (!gate.ok) {
+    if (gate.ok === false) {
       setFormError(gate.error ?? signInBlockedMessage(gate.reason))
       setStatus('idle')
       return
