@@ -26,7 +26,8 @@
 }
 
 input[type='email'],
-input[type='text'] {
+input[type='text'],
+input[type='password'] {
   width: 100%;
   font: inherit;
   padding: 10px 12px;

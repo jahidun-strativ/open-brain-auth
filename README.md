@@ -1,31 +1,24 @@
 # open-brain-auth (Coeo)
 
-OAuth 2.1 authorization UI for the Coeo Supabase project.
+OAuth 2.1 authorization UI — **email + password** sign-in, pre-login MCP access check, OAuth consent.
 
-Same behavior as [open-brain-rnd-auth](../open-brain-rnd-auth/README.md): email magic link, pre-login MCP access check, OAuth consent.
-
-## SQL (required)
-
-Run in the **Coeo** Supabase project:
+## SQL
 
 **[../open-brain-setup-coeo/sql/README.md](../open-brain-setup-coeo/sql/README.md)**
 
-Minimum:
+1. [setup.sql](../open-brain-setup-coeo/sql/setup.sql)
+2. [auth-ui-rpc.sql](../open-brain-setup-coeo/sql/auth-ui-rpc.sql)
 
-1. [../open-brain-setup-coeo/sql/setup.sql](../open-brain-setup-coeo/sql/setup.sql)
-2. [../open-brain-setup-coeo/sql/auth-ui-rpc.sql](../open-brain-setup-coeo/sql/auth-ui-rpc.sql)
+## Supabase
 
-Legacy DB: [mcp-auth-upgrade.sql](../open-brain-setup-coeo/sql/mcp-auth-upgrade.sql) first.
+- **Email + password** ON, **sign-up** OFF
+- Create users with password in **Authentication → Users**
+- Grant `mcp_user_projects` in SQL
 
-## Docs
+Full guide: [../open-brain-setup-coeo/05-oauth-setup.md](../open-brain-setup-coeo/05-oauth-setup.md)
 
-- [../open-brain-setup-coeo/05-oauth-setup.md](../open-brain-setup-coeo/05-oauth-setup.md)
-- [../open-brain-setup-coeo/auth/README.md](../open-brain-setup-coeo/auth/README.md) (in-repo `auth/` copy)
-
-## Local dev
+## Dev
 
 ```bash
-pnpm install
-cp .env.example .env.local
-pnpm dev
+pnpm install && cp .env.example .env.local && pnpm dev
 ```
