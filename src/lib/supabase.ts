@@ -14,7 +14,7 @@ export const supabase = createClient(url, key, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    // Magic-link sign-in uses PKCE when redirecting back to /auth/callback.
+    // PKCE for any auth redirects (e.g. invite links) via /auth/callback.
     flowType: 'pkce',
   },
 })

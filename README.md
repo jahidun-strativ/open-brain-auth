@@ -5,18 +5,13 @@ OAuth 2.1 authorization UI for Supabase Auth (Claude.ai custom connectors, etc.)
 ## What this app does
 
 - Consent at `/oauth/consent?authorization_id=…`
-- **Email magic link** sign-in (invite-only, no Google)
-- **Before** sending a link: checks email is in `auth.users` and has `mcp_user_projects`
-- Callback at `/auth/callback` (PKCE)
+- **Email + password** sign-in (invite-only — no public sign-up)
+- **Before** sign-in: checks email is in `auth.users` and has `mcp_user_projects`
 - `approveAuthorization` / `denyAuthorization` via Supabase Auth OAuth API
 
 ## SQL (required)
 
-Run in the **RND** Supabase project — full guide:
-
 **[../open-brain-rnd/sql/README.md](../open-brain-rnd/sql/README.md)**
-
-Minimum for this app:
 
 1. [../open-brain-rnd/sql/setup.sql](../open-brain-rnd/sql/setup.sql)
 2. [../open-brain-rnd/sql/auth-ui-rpc.sql](../open-brain-rnd/sql/auth-ui-rpc.sql)
@@ -26,11 +21,25 @@ Minimum for this app:
 | Setting | Value |
 | ------- | ----- |
 | **Allow new users to sign up** | **OFF** |
-| **Email provider** | **ON** |
-| **Google provider** | **OFF** |
+| **Email provider** | **ON** — enable **Email + password** (not magic link / OTP only) |
+| **Confirm email** | Your choice — if ON, users must be confirmed before `signInWithPassword` works |
+| **Google provider** | **OFF** (optional) |
 | **OAuth 2.1 Server** | **ON**, path `/oauth/consent` |
 | **Site URL** | this app (dev: `http://localhost:5173`) |
-| **Redirect URLs** | `…/auth/callback` |
+| **Redirect URLs** | `…/auth/callback` (for invite / recovery links only) |
+
+### Adding users (password)
+
+1. **Authentication → Users → Add user** (or Invite).
+2. Set **email** and **password** (or send invite so they set a password).
+3. Grant MCP access in SQL:
+
+```sql
+INSERT INTO mcp_user_projects (user_id, project)
+VALUES ('<user-uuid>', 'your-project-slug');
+```
+
+Users without `auth.users` or without `mcp_user_projects` are blocked on the login form before password is checked.
 
 Connector setup: [../open-brain-rnd/05-oauth-setup.md](../open-brain-rnd/05-oauth-setup.md)
 
@@ -38,10 +47,10 @@ Connector setup: [../open-brain-rnd/05-oauth-setup.md](../open-brain-rnd/05-oaut
 
 ```bash
 pnpm install
-cp .env.example .env.local   # VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY
-pnpm dev                     # http://localhost:5173
+cp .env.example .env.local
+pnpm dev
 ```
 
 ## Deploy (Vercel)
 
-Set env vars, point Supabase **Site URL** / **Redirect URLs** at production host, deploy. Push to Git if Vercel auto-deploys.
+Set `VITE_SUPABASE_*`, configure Supabase **Site URL** / **Redirect URLs**, push to deploy.
