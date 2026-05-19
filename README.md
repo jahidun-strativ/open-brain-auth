@@ -1,4 +1,4 @@
-# open-brain-auth
+# open-brain-auth (Coeo)
 
 A Vite + React + TypeScript app that serves as the **OAuth 2.1 authorization UI**
 for Supabase Auth's [OAuth Server](https://supabase.com/docs/guides/auth/oauth-server/getting-started).
@@ -8,9 +8,10 @@ and approve access.
 ## What this app does
 
 - Renders the consent screen at `/oauth/consent?authorization_id=…`
-- **Invite-only** sign-in: **Continue with Google** first; after Google returns, checks `auth.users` (RPC)
-- Handles the Google return at `/auth/callback` (PKCE)
-- Blocks consent if the user has no row in `mcp_user_projects` (MCP allowlist)
+- **Invite-only** sign-in via **email magic link** (no Google)
+- **Before** sending a magic link: checks the email is in `auth.users` and has `mcp_user_projects` (RPC)
+- Handles the magic-link return at `/auth/callback` (PKCE)
+- Re-checks MCP access after sign-in; blocks consent if access was revoked
 - Calls `supabase.auth.oauth.approveAuthorization` / `denyAuthorization` to finish the flow
 
 ## Routes
@@ -18,8 +19,8 @@ and approve access.
 | Path             | Purpose                                                                 |
 | ---------------- | ----------------------------------------------------------------------- |
 | `/`              | Landing page                                                            |
-| `/login`         | Google sign-in (`?redirect=<path>`, optional `?error=` from failed check) |
-| `/auth/callback` | Google OAuth return — PKCE exchange, then forward to `redirect`         |
+| `/login`         | Email magic link (`?redirect=<path>`, optional `?error=` from failed check) |
+| `/auth/callback` | Magic-link return — PKCE exchange, then forward to `redirect`         |
 | `/oauth/consent` | OAuth consent — expects `?authorization_id=<id>` from Supabase Auth     |
 
 ## Setup
@@ -41,50 +42,28 @@ VITE_SUPABASE_URL=https://<project-ref>.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 ```
 
-Use the **publishable** (anon) key from **Project Settings → API**, not the service role key.
-
 ### 3. Run SQL migration (required)
 
 In **Supabase SQL Editor**, run:
 
-[`../open-brain-rnd/sql/auth-ui-rpc.sql`](../open-brain-rnd/sql/auth-ui-rpc.sql)
+[`../open-brain-setup-coeo/sql/auth-ui-rpc.sql`](../open-brain-setup-coeo/sql/auth-ui-rpc.sql)
 
-This creates:
+Also ensure [`../open-brain-setup-coeo/sql/setup.sql`](../open-brain-setup-coeo/sql/setup.sql) (or `mcp-auth-upgrade.sql` on existing DB) has been applied.
 
-- `is_user_invited(email)` — callable before login (`anon`); true if email exists in `auth.users`
-- `user_has_mcp_access()` — callable when signed in; true if user has any `mcp_user_projects` row
-
-Also ensure [`../open-brain-rnd/sql/setup.sql`](../open-brain-rnd/sql/setup.sql) has been applied (creates `mcp_user_projects`).
+RPCs: `is_user_invited`, `email_has_mcp_access`, `user_has_mcp_access` — see that file for details.
 
 ### 4. Supabase Dashboard
 
 | Setting | Value |
 | ------- | ----- |
-| **Allow new users to sign up** | **OFF** (invite / add user only) |
-| **Google provider** | **ON** — Client ID + secret from Google Cloud Console |
-| Google redirect URI | `https://<project-ref>.supabase.co/auth/v1/callback` |
+| **Allow new users to sign up** | **OFF** |
+| **Email provider** | **ON** (magic link) |
+| **Google provider** | **OFF** |
 | **OAuth 2.1 Server** | **ON**, authorization path `/oauth/consent` |
-| **Site URL** | `http://localhost:5173` (dev) or your Vercel URL (prod) |
-| **Redirect URLs** | `http://localhost:5173/auth/callback`, production `/auth/callback` |
+| **Site URL** | your auth app URL (dev: `http://localhost:5173`) |
+| **Redirect URLs** | `…/auth/callback` for dev and prod |
 
-#### Google Cloud Console
-
-1. OAuth consent screen (Internal if using Google Workspace).
-2. OAuth client (Web application).
-3. Authorized redirect URI: Supabase callback above.
-
-#### Adding users
-
-1. **Authentication → Users → Invite user** (or Add user).
-2. Grant MCP access in SQL:
-
-```sql
-INSERT INTO mcp_user_projects (user_id, project)
-VALUES ('<user-uuid>', 'your-project-slug');
--- Or super-user: ('<user-uuid>', '*');
-```
-
-Users without `auth.users` see **User does not exist** after Google (redirected back to login). Users without `mcp_user_projects` see **Access denied** on consent.
+See [`../open-brain-setup-coeo/05-oauth-setup.md`](../open-brain-setup-coeo/05-oauth-setup.md) for the full connector walkthrough.
 
 ### 5. Run locally
 
@@ -92,25 +71,8 @@ Users without `auth.users` see **User does not exist** after Google (redirected 
 pnpm dev
 ```
 
-Vite is pinned to port **5173** (`strictPort: true`). Free the port if another process holds it.
-
-### 6. Auth client (`flowType: 'pkce'`)
-
-Google OAuth runs in the same browser tab; [`src/lib/supabase.ts`](src/lib/supabase.ts) uses **PKCE** and `exchangeCodeForSession` in [`AuthCallback.tsx`](src/pages/AuthCallback.tsx).
+Port **5173** (`strictPort: true`).
 
 ## Deploy on Vercel
 
-[`vercel.json`](vercel.json) rewrites all routes to `index.html` for the SPA.
-
-1. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` in Vercel env.
-2. Set Supabase **Site URL** and **Redirect URLs** to your production domain.
-3. Redeploy after env or `vercel.json` changes.
-
-## Scripts
-
-| Command        | What it does                         |
-| -------------- | ------------------------------------ |
-| `pnpm dev`     | Dev server on port `5173`            |
-| `pnpm build`   | Type-check and production build      |
-| `pnpm preview` | Preview production build             |
-| `pnpm lint`    | ESLint                               |
+Set `VITE_SUPABASE_*` env vars, configure Supabase **Site URL** / **Redirect URLs**, deploy. See [`vercel.json`](vercel.json).

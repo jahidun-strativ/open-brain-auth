@@ -1,6 +1,10 @@
 import { useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { checkUserInvited } from '../lib/auth-policy'
+import {
+  checkMcpAccess,
+  checkUserInvited,
+  signInBlockedMessage,
+} from '../lib/auth-policy'
 import { supabase } from '../lib/supabase'
 
 function readUrlError(params: URLSearchParams): string | null {
@@ -68,7 +72,7 @@ export function AuthCallback() {
       if (!email) {
         await supabase.auth.signOut()
         navigate(
-          loginWithError(redirect, 'Your Google account has no email. Contact your administrator.'),
+          loginWithError(redirect, 'Your account has no email. Contact your administrator.'),
           { replace: true },
         )
         return
@@ -83,10 +87,22 @@ export function AuthCallback() {
       if (!invited) {
         await supabase.auth.signOut()
         navigate(
-          loginWithError(
-            redirect,
-            'User does not exist. Ask your administrator to invite you before signing in.',
-          ),
+          loginWithError(redirect, signInBlockedMessage('not_invited')),
+          { replace: true },
+        )
+        return
+      }
+
+      const { allowed, error: accessError } = await checkMcpAccess()
+      if (cancelled) return
+      if (accessError) {
+        navigate(loginWithError(redirect, accessError), { replace: true })
+        return
+      }
+      if (!allowed) {
+        await supabase.auth.signOut()
+        navigate(
+          loginWithError(redirect, signInBlockedMessage('no_mcp_access')),
           { replace: true },
         )
         return
