@@ -1,6 +1,6 @@
 # open-brain-auth
 
-OAuth 2.1 authorization UI for Supabase Auth (Claude.ai custom connectors, etc.).
+OAuth 2.1 authorization UI — **email + password** sign-in, pre-login MCP access check, OAuth consent.
 
 ## What this app does
 
@@ -16,7 +16,9 @@ OAuth 2.1 authorization UI for Supabase Auth (Claude.ai custom connectors, etc.)
 1. [../open-brain-rnd/sql/setup.sql](../open-brain-rnd/sql/setup.sql)
 2. [../open-brain-rnd/sql/auth-ui-rpc.sql](../open-brain-rnd/sql/auth-ui-rpc.sql)
 
-## Supabase Dashboard
+- **Email + password** ON, **sign-up** OFF
+- Create users with password in **Authentication → Users**
+- Grant `mcp_user_projects` in SQL
 
 | Setting | Value |
 | ------- | ----- |
@@ -41,9 +43,7 @@ VALUES ('<user-uuid>', 'your-project-slug');
 
 Users without `auth.users` or without `mcp_user_projects` are blocked on the login form before password is checked.
 
-Connector setup: [../open-brain-rnd/05-oauth-setup.md](../open-brain-rnd/05-oauth-setup.md)
-
-## Local dev
+## Dev
 
 ```bash
 pnpm install
