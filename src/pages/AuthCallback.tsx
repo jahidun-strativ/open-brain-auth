@@ -108,6 +108,7 @@ export function AuthCallback() {
         return
       }
 
+      await supabase.auth.refreshSession()
       navigate(redirect, { replace: true })
     }
 

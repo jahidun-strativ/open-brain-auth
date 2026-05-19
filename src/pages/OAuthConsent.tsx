@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { checkMcpAccess, checkUserInvited, signInBlockedMessage } from '../lib/auth-policy'
+import { formatOAuthAuthorizationError } from '../lib/oauth-errors'
 import { supabase } from '../lib/supabase'
 
 interface OAuthClient {
@@ -87,15 +88,41 @@ export function OAuthConsent() {
         return
       }
 
-      const { data: userData } = await supabase.auth.getUser()
+      const { data: sessionData } = await supabase.auth.getSession()
       if (cancelled) return
 
-      if (!userData.user) {
+      if (!sessionData.session?.user) {
         const next = `/oauth/consent?authorization_id=${encodeURIComponent(authorizationId)}`
         navigate(`/login?redirect=${encodeURIComponent(next)}`, { replace: true })
         return
       }
-      const email = userData.user.email ?? null
+
+      // Fetch OAuth details immediately after session is ready (authorization_id expires quickly).
+      try {
+        const { data, error: detailsError } =
+          await getOAuth().getAuthorizationDetails(authorizationId)
+        if (cancelled) return
+        if (detailsError) {
+          setError(formatOAuthAuthorizationError(detailsError.message))
+          setLoading(false)
+          return
+        }
+        if (!data) {
+          setError(formatOAuthAuthorizationError('authorization not found'))
+          setLoading(false)
+          return
+        }
+        setAuthDetails(data)
+      } catch (e) {
+        if (!cancelled) {
+          const msg = e instanceof Error ? e.message : String(e)
+          setError(formatOAuthAuthorizationError(msg))
+          setLoading(false)
+        }
+        return
+      }
+
+      const email = sessionData.session.user.email ?? null
       setUserEmail(email)
 
       if (email) {
@@ -115,29 +142,6 @@ export function OAuthConsent() {
           )
           return
         }
-      }
-
-      try {
-        const { data, error: detailsError } =
-          await getOAuth().getAuthorizationDetails(authorizationId)
-        if (cancelled) return
-        if (detailsError) {
-          setError(detailsError.message)
-          setLoading(false)
-          return
-        }
-        if (!data) {
-          setError('No authorization request found for this id.')
-          setLoading(false)
-          return
-        }
-        setAuthDetails(data)
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : String(e))
-          setLoading(false)
-        }
-        return
       }
 
       const { allowed, error: accessError } = await checkMcpAccess()
@@ -196,8 +200,10 @@ export function OAuthConsent() {
       }
 
       setError(
-        decisionError?.message ??
-          'Could not complete the request. Try again or close this tab and return to your app.',
+        formatOAuthAuthorizationError(
+          decisionError?.message ??
+            'Could not complete the request. Try again or close this tab and return to your app.',
+        ),
       )
       setSubmitting(null)
     } catch (e) {
