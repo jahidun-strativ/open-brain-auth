@@ -14,7 +14,7 @@ export const supabase = createClient(url, key, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    // Google OAuth runs in the same browser tab; PKCE is appropriate here.
+    // Magic-link sign-in uses PKCE when redirecting back to /auth/callback.
     flowType: 'pkce',
   },
 })

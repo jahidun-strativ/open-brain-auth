@@ -8,9 +8,10 @@ and approve access.
 ## What this app does
 
 - Renders the consent screen at `/oauth/consent?authorization_id=…`
-- **Invite-only** sign-in: **Continue with Google** first; after Google returns, checks `auth.users` (RPC)
-- Handles the Google return at `/auth/callback` (PKCE)
-- Blocks consent if the user has no row in `mcp_user_projects` (MCP allowlist)
+- **Invite-only** sign-in via **email magic link** (no Google)
+- **Before** sending a magic link: checks the email is in `auth.users` and has `mcp_user_projects` (RPC)
+- Handles the magic-link return at `/auth/callback` (PKCE)
+- Re-checks MCP access after sign-in; blocks consent if access was revoked
 - Calls `supabase.auth.oauth.approveAuthorization` / `denyAuthorization` to finish the flow
 
 ## Routes
@@ -18,8 +19,8 @@ and approve access.
 | Path             | Purpose                                                                 |
 | ---------------- | ----------------------------------------------------------------------- |
 | `/`              | Landing page                                                            |
-| `/login`         | Google sign-in (`?redirect=<path>`, optional `?error=` from failed check) |
-| `/auth/callback` | Google OAuth return — PKCE exchange, then forward to `redirect`         |
+| `/login`         | Email magic link (`?redirect=<path>`, optional `?error=` from failed check) |
+| `/auth/callback` | Magic-link return — PKCE exchange, then forward to `redirect`         |
 | `/oauth/consent` | OAuth consent — expects `?authorization_id=<id>` from Supabase Auth     |
 
 ## Setup
@@ -51,8 +52,9 @@ In **Supabase SQL Editor**, run:
 
 This creates:
 
-- `is_user_invited(email)` — callable before login (`anon`); true if email exists in `auth.users`
-- `user_has_mcp_access()` — callable when signed in; true if user has any `mcp_user_projects` row
+- `is_user_invited(email)` — pre-login; true if email exists in `auth.users`
+- `email_has_mcp_access(email)` — pre-login; true if that user has any `mcp_user_projects` row
+- `user_has_mcp_access()` — post-login; same check for the signed-in user
 
 Also ensure [`../open-brain-rnd/sql/setup.sql`](../open-brain-rnd/sql/setup.sql) has been applied (creates `mcp_user_projects`).
 
@@ -61,17 +63,11 @@ Also ensure [`../open-brain-rnd/sql/setup.sql`](../open-brain-rnd/sql/setup.sql)
 | Setting | Value |
 | ------- | ----- |
 | **Allow new users to sign up** | **OFF** (invite / add user only) |
-| **Google provider** | **ON** — Client ID + secret from Google Cloud Console |
-| Google redirect URI | `https://<project-ref>.supabase.co/auth/v1/callback` |
+| **Email provider** | **ON** (magic link) |
+| **Google provider** | **OFF** (optional — not used by this app) |
 | **OAuth 2.1 Server** | **ON**, authorization path `/oauth/consent` |
 | **Site URL** | `http://localhost:5173` (dev) or your Vercel URL (prod) |
 | **Redirect URLs** | `http://localhost:5173/auth/callback`, production `/auth/callback` |
-
-#### Google Cloud Console
-
-1. OAuth consent screen (Internal if using Google Workspace).
-2. OAuth client (Web application).
-3. Authorized redirect URI: Supabase callback above.
 
 #### Adding users
 
@@ -84,7 +80,7 @@ VALUES ('<user-uuid>', 'your-project-slug');
 -- Or super-user: ('<user-uuid>', '*');
 ```
 
-Users without `auth.users` see **User does not exist** after Google (redirected back to login). Users without `mcp_user_projects` see **Access denied** on consent.
+Users without `auth.users` see **not registered** on login (before any email is sent). Users without `mcp_user_projects` see **no Open Brain access** on login. Users who lose access after sign-in see **Access denied** on consent.
 
 ### 5. Run locally
 
@@ -96,7 +92,7 @@ Vite is pinned to port **5173** (`strictPort: true`). Free the port if another p
 
 ### 6. Auth client (`flowType: 'pkce'`)
 
-Google OAuth runs in the same browser tab; [`src/lib/supabase.ts`](src/lib/supabase.ts) uses **PKCE** and `exchangeCodeForSession` in [`AuthCallback.tsx`](src/pages/AuthCallback.tsx).
+Magic links redirect to `/auth/callback`; [`src/lib/supabase.ts`](src/lib/supabase.ts) uses **PKCE** and `exchangeCodeForSession` in [`AuthCallback.tsx`](src/pages/AuthCallback.tsx). `signInWithOtp` uses `shouldCreateUser: false` so unknown emails cannot self-register.
 
 ## Deploy on Vercel
 
